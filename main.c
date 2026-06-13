@@ -27,6 +27,7 @@ int main() {
 
     fprintf(codeFile, "#include <stdio.h>\nint main() {\n");
     char lastExpression[256];
+    int lastOuputLength = 0;
     printf("C REPL: Enter an expression...\n");
     for (;;) {
         printf(": ");
@@ -36,6 +37,7 @@ int main() {
             return 0;
         }
 
+        long ptrBeforeNewLine = ftell(codeFile);
         fprintf(codeFile, "%s", lastExpression);
         fprintf(codeFile, "%s", "}\n");
         fflush(codeFile);
@@ -43,7 +45,12 @@ int main() {
         char sysCall[256] = "gcc ";
         strcat(sysCall, tempFilePath);
         strcat(sysCall, " -o repl && ./repl");
-        system(sysCall);
+        int gccReturnCode = system(sysCall);
+        if (gccReturnCode != 0) {
+            ftruncate(fileno(codeFile), ptrBeforeNewLine);
+            fseek(codeFile, ptrBeforeNewLine, SEEK_SET);
+            continue;
+        }
         printf("\n");
 
         // Remove "}\n for next loop"
