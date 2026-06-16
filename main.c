@@ -6,18 +6,13 @@
 
 /*
  * TODO list:
- *  - after every loop remove the last loop output so it only shows
- *  the output from new expressions (this is almost done, just need to remove
- *  last output by character instead of by line, because it remove output
- *  that it shouldn't if the last output didn't have a break-line)
- *
  *  - add ability to use arrow up and arrow down to check history and
  *  left arrow and right arrow to edit the text
  *
  *  - if the users adds an expression that returns a value but they don't catch the value
  *  we should print that return value
  *
- *  - add ability do edit history/current backing file
+ *  - add ability do edit history/current backing file (temp.c)
  */
 
 static int lastOutputLength = 0;
@@ -32,32 +27,27 @@ bool compileAndRun(char *tempFilePath) {
     strcat(sysCall, " -o repl 2>&1 && ./repl 2>&1 ");
     FILE *pipe = popen(sysCall, "r");
 
-    OutputLine outputLine;
-    OutputLine allLines[256];
-    int lineCount = 0;
-    while (fgets(outputLine.buffer, sizeof(outputLine.buffer), pipe)) {
-        allLines[lineCount++] = outputLine;
+    int charCount = 0;
+    int character;
+    unsigned char characters[256*256];
+    while ((character = fgetc(pipe)) != EOF) {
+        characters[charCount++] = (unsigned char) character;
     }
 
     int status = pclose(pipe);
     if (WIFEXITED(status)) { // process terminated normally (did not crash)
         int exitCode = WEXITSTATUS(status);
         if (exitCode == 0) {
-            for (int i = lastOutputLength; i < lineCount; ++i) {
-                printf("%s\n", allLines[i].buffer);
+            for (int i = lastOutputLength; i < charCount; ++i) {
+                printf("%c", characters[i]);
             }
-            //TODO: figure out a way to do this without removing output if
-            //the last output didn't have a break line on it's last line
-            //probably need to do this by character instead of line
-            lastOutputLength = lineCount;
+            lastOutputLength = charCount;
         } else {
             // gcc return non zero exit code (could also be the users program)
 
             // Print all output to show complilation errors
-            for (int i = 0; i < lineCount; ++i) {
-                printf("%s", allLines[i].buffer);
-            }
-            printf("gcc exit code non-zero\n");
+            printf("%s", characters);
+            printf("gcc exited with non-zero exit code: %d\n", exitCode);
             return 0;
         }
     } else {
@@ -83,9 +73,9 @@ int main() {
     for (;;) {
         printf(": ");
         fgets(lastExpression, sizeof(lastExpression), stdin);
-        //lastExpression[strcspn(lastExpression, "\n")] = '\0';
+        lastExpression[strcspn(lastExpression, "\n")] = '\0';
         if (strcmp(lastExpression, "exit();") == 0) {
-            return 0;
+            break;
         }
 
         long ptrBeforeNewLine = ftell(codeFile);
@@ -107,6 +97,8 @@ int main() {
         ftruncate(fileno(codeFile), filePointerPos);
         fseek(codeFile, filePointerPos, SEEK_SET);
     }
-    printf("last expression %s\n", lastExpression);
+
+    fclose(codeFile);
+    remove(tempFilePath);
     return 0;
 }
